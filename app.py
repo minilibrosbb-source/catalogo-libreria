@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import re
 
 # 1. Configuración de la página
 st.set_page_config(
