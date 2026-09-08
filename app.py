@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import streamlit.components.v1 as components
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -128,7 +129,7 @@ if st.sidebar.button("Obtener Enlace de Descarga"):
             st.sidebar.success(f"**{book['Titulo']}**")
             
             link_descarga = str(book['Link_Descarga']).strip()
-            if pd.notna(book['Link_Descarga']) and link_descarga not in ["", "-", "nan"]:
+            if pd.notna(book['Link_Descarga']) and link_descarga not in ["", "-", "nan", "None"]:
                 st.sidebar.markdown(f"[📥 Descargar Archivo Completo]({link_descarga})")
             else:
                 st.sidebar.info("📌 Tu solicitud ha sido registrada. El enlace directo estará disponible en breve.")
@@ -176,12 +177,15 @@ with col_m1:
 
 st.markdown("---")
 
-# Visualización de Libros
+# ---------------------------------------------------------
+# VISUALIZACIÓN DE LIBROS CON LECTOR INTEGRADO
+# ---------------------------------------------------------
 if filtered_df.empty:
     st.warning("No se encontraron publicaciones que coincidan con los filtros seleccionados.")
 else:
     for idx, row in filtered_df.iterrows():
         with st.container():
+            # Encabezado de la tarjeta
             st.markdown(f"""
                 <div class="stCard">
                     <span class="book-code">{row['ID_Libro']}</span> — <strong>{row['Categoria_Principal']}</strong> ({row['Tipo_Documento']})
@@ -190,24 +194,27 @@ else:
                 </div>
             """, unsafe_allow_html=True)
             
-            c1, c2 = st.columns([4, 6])
-            
-            # --- EVALUACIÓN Y VINCULACIÓN DEL ENLACE DE PREVISUALIZACIÓN ---
             preview_val = str(row['Link_Previsualizacion']).strip()
             
-            # Comprobar si la celda contiene una URL válida (http/https) o texto de enlace
+            # Comprobación de URL de previsualización
             if pd.notna(row['Link_Previsualizacion']) and preview_val not in ["", "-", "nan", "None"]:
-                if preview_val.startswith("http://") or preview_val.startswith("https://"):
-                    c1.markdown(f"🔗 **[👁️ Abrir Previsualización / Vista Previa]({preview_val})**")
-                else:
-                    # En caso de que la celda tenga un enlace sin el protocolo http://
-                    c1.markdown(f"🔗 **[👁️ Abrir Previsualización / Vista Previa](http://{preview_val})**")
-            else:
-                c1.caption("👁️ Vista previa no vinculada")
+                embed_url = preview_val
                 
-            # Etiquetas adicionales
+                # Transformación de enlace si proviene de Google Drive
+                if "drive.google.com" in embed_url:
+                    embed_url = embed_url.replace("/view", "/preview").replace("?usp=sharing", "")
+                    if not embed_url.endswith("/preview"):
+                        embed_url = embed_url + "/preview"
+
+                # Desplegable con visor embebido en pantalla completa dentro de la app
+                with st.expander(f"👁️ Previsualizar documento en pantalla"):
+                    components.iframe(embed_url, height=600, scrolling=True)
+            else:
+                st.caption("👁️ Vista previa no vinculada")
+
+            # Muestra de etiquetas
             etiquetas_val = str(row['Etiquetas']).strip()
             if pd.notna(row['Etiquetas']) and etiquetas_val not in ["", "-", "nan", "None"]:
-                c2.caption(f"🏷️ *{etiquetas_val}*")
+                st.caption(f"🏷️ *{etiquetas_val}*")
                 
             st.markdown("<br>", unsafe_allow_html=True)
