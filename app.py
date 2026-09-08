@@ -30,13 +30,6 @@ st.markdown("""
         border-radius: 4px;
         font-weight: bold;
     }
-    .badge-tag {
-        background-color: #e0e0e0;
-        color: #333;
-        padding: 2px 6px;
-        border-radius: 3px;
-        font-size: 0.8em;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -48,7 +41,7 @@ def load_data():
     # 1. Eliminar espacios accidentales en los nombres de las columnas
     df.columns = df.columns.str.strip()
     
-    # 2. Diccionario de equivalencias para normalizar nombres
+    # 2. Diccionario de equivalencias para normalizar nombres de columnas
     mapa_columnas = {}
     for col in df.columns:
         c_low = col.lower().replace("_", "").replace("-", "").replace(" ", "")
@@ -65,7 +58,7 @@ def load_data():
             mapa_columnas[col] = "Autor-a"
         elif "año" in c_low or "anio" in c_low or "date" in c_low:
             mapa_columnas[col] = "Año"
-        elif "preview" in c_low or "previsua" in c_low or "vista" in c_low:
+        elif "preview" in c_low or "previsualizac" in c_low or "vista" in c_low:
             mapa_columnas[col] = "Link_Previsualizacion"
         elif "descarga" in c_low or "link" in c_low or "enlace" in c_low:
             mapa_columnas[col] = "Link_Descarga"
@@ -76,7 +69,7 @@ def load_data():
             
     df = df.rename(columns=mapa_columnas)
     
-    # Asegurar existencia de columnas esenciales si el CSV no las tiene
+    # Asegurar existencia de columnas esenciales
     columnas_base = [
         'ID_Libro', 'Categoria_Principal', 'Tipo_Documento', 'Titulo', 
         'Autor-a', 'Año', 'Link_Previsualizacion', 'Link_Descarga', 
@@ -98,7 +91,7 @@ df = load_data()
 # ---------------------------------------------------------
 st.sidebar.title("📚 Filtros de Búsqueda")
 
-# 1. Categoría Principal (Temática)
+# 1. Categoría Principal
 categorias_vals = [x for x in df['Categoria_Principal'].dropna().unique().tolist() if str(x) != "-"]
 categorias = ["Todas"] + sorted(categorias_vals)
 cat_selected = st.sidebar.selectbox("Temática / Categoría:", categorias)
@@ -121,9 +114,7 @@ year_range = st.sidebar.slider(
 
 st.sidebar.markdown("---")
 
-# ---------------------------------------------------------
-# SECCIÓN: SOLICITUD DE DESCARGA VÍA CÓDIGO SERIAL
-# ---------------------------------------------------------
+# Solicitud de descarga mediante código
 st.sidebar.subheader("🔑 Solicitar Descarga")
 st.sidebar.caption("Ingresa el código del libro que deseas solicitar (ej. LIB-001):")
 
@@ -136,9 +127,8 @@ if st.sidebar.button("Obtener Enlace de Descarga"):
             book = match.iloc[0]
             st.sidebar.success(f"**{book['Titulo']}**")
             
-            # Verificación de enlace de descarga disponible
-            link_descarga = book['Link_Descarga']
-            if pd.notna(link_descarga) and str(link_descarga).strip() not in ["", "-"]:
+            link_descarga = str(book['Link_Descarga']).strip()
+            if pd.notna(book['Link_Descarga']) and link_descarga not in ["", "-", "nan"]:
                 st.sidebar.markdown(f"[📥 Descargar Archivo Completo]({link_descarga})")
             else:
                 st.sidebar.info("📌 Tu solicitud ha sido registrada. El enlace directo estará disponible en breve.")
@@ -153,27 +143,23 @@ if st.sidebar.button("Obtener Enlace de Descarga"):
 st.title("📖 Catálogo Digital de Archivo y Lectura")
 st.caption("Explora, previsualiza en línea y solicita acceso a títulos en formato digital.")
 
-# Búsqueda por Texto (Título / Autor / Etiquetas)
+# Búsqueda por Texto
 search_query = st.text_input("🔎 Buscar por Título, Autor o Palabra Clave:", placeholder="Ej. Bresson, Urbanismo, Foucault...")
 
 # Aplicación de filtros al DataFrame
 filtered_df = df.copy()
 
-# Filtro por temática
 if cat_selected != "Todas":
     filtered_df = filtered_df[filtered_df['Categoria_Principal'] == cat_selected]
 
-# Filtro por tipo de documento
 if tipo_selected != "Todos":
     filtered_df = filtered_df[filtered_df['Tipo_Documento'] == tipo_selected]
 
-# Filtro por año
 filtered_df = filtered_df[
     (filtered_df['Año_Clean'].isna()) | 
     ((filtered_df['Año_Clean'] >= year_range[0]) & (filtered_df['Año_Clean'] <= year_range[1]))
 ]
 
-# Filtro por texto de búsqueda
 if search_query:
     q = search_query.lower()
     filtered_df = filtered_df[
@@ -190,7 +176,7 @@ with col_m1:
 
 st.markdown("---")
 
-# Visualización de Libros en Vista Lista / Tarjetas
+# Visualización de Libros
 if filtered_df.empty:
     st.warning("No se encontraron publicaciones que coincidan con los filtros seleccionados.")
 else:
@@ -204,17 +190,24 @@ else:
                 </div>
             """, unsafe_allow_html=True)
             
-            c1, c2, c3 = st.columns([3, 3, 4])
+            c1, c2 = st.columns([4, 6])
             
-            # Enlace a Previsualización en Drive
-            preview_url = row['Link_Previsualizacion']
-            if pd.notna(preview_url) and str(preview_url).strip() not in ["", "-"]:
-                c1.markdown(f"[👁️ Previsualizar en Drive]({preview_url})")
+            # --- EVALUACIÓN Y VINCULACIÓN DEL ENLACE DE PREVISUALIZACIÓN ---
+            preview_val = str(row['Link_Previsualizacion']).strip()
+            
+            # Comprobar si la celda contiene una URL válida (http/https) o texto de enlace
+            if pd.notna(row['Link_Previsualizacion']) and preview_val not in ["", "-", "nan", "None"]:
+                if preview_val.startswith("http://") or preview_val.startswith("https://"):
+                    c1.markdown(f"🔗 **[👁️ Abrir Previsualización / Vista Previa]({preview_val})**")
+                else:
+                    # En caso de que la celda tenga un enlace sin el protocolo http://
+                    c1.markdown(f"🔗 **[👁️ Abrir Previsualización / Vista Previa](http://{preview_val})**")
             else:
                 c1.caption("👁️ Vista previa no vinculada")
                 
-            # Muestra etiquetas adicionales si existen
-            if pd.notna(row['Etiquetas']) and str(row['Etiquetas']).strip() not in ["", "-"]:
-                c2.caption(f"🏷️ *{row['Etiquetas']}*")
+            # Etiquetas adicionales
+            etiquetas_val = str(row['Etiquetas']).strip()
+            if pd.notna(row['Etiquetas']) and etiquetas_val not in ["", "-", "nan", "None"]:
+                c2.caption(f"🏷️ *{etiquetas_val}*")
                 
             st.markdown("<br>", unsafe_allow_html=True)
