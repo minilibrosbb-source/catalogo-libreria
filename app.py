@@ -1,165 +1,174 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Configuración de la página
+# Configuración inicial de la página
 st.set_page_config(
-    page_title="Biblioteca & Catálogo Digital",
+    page_title="Catálogo de Librería Personal",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados para tarjetas elegantes
+# Estilo CSS para mantener una interfaz limpia y moderna
 st.markdown("""
-<style>
-    .book-card {
-        background-color: #f9f9f9;
-        border: 1px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 18px;
-        margin-bottom: 15px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    <style>
+    .main {
+        padding-top: 1rem;
     }
-    .book-title {
-        color: #1E1E1E;
-        font-size: 1.15rem;
+    .stCard {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        border-left: 4px solid #1E88E5;
+    }
+    .book-code {
+        font-family: monospace;
+        background-color: #e3f2fd;
+        color: #0d47a1;
+        padding: 2px 8px;
+        border-radius: 4px;
         font-weight: bold;
-        margin-bottom: 5px;
     }
-    .book-author {
-        color: #555555;
-        font-size: 0.95rem;
-        font-style: italic;
-        margin-bottom: 10px;
+    .badge-tag {
+        background-color: #e0e0e0;
+        color: #333;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.8em;
     }
-    .stButton>button {
-        width: 100%;
-    }
-</style>
+    </style>
 """, unsafe_allow_html=True)
 
-# 2. Carga y preparación de datos desde GitHub
-URL_CSV_GITHUB = "https://raw.githubusercontent.com/TU_USUARIO/TU_REPOSITORIO/main/TU_ARCHIVO.csv"
+# Carga de la base de datos
+@st.cache_data
+def load_data():
+    df = pd.read_csv('Catalogo_Estructurado.csv')
+    df['Año_Clean'] = pd.to_numeric(df['Año'], errors='coerce')
+    return df
 
-@st.cache_data(ttl=300)
-def cargar_datos(url):
-    try:
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        
-        # Intento de extracción o conversión del año si existe en el título o en alguna columna
-        if 'Año' not in df.columns:
-            # Busca un año de 4 dígitos dentro del título del libro si no existe una columna explícita
-            col_titulo = [c for c in df.columns if 'nombre' in c.lower() or 'titulo' in c.lower() or 'libro' in c.lower()][0]
-            df['Año'] = df[col_titulo].astype(str).apply(
-                lambda x: int(re.search(r'\b(18|19|20)\d{2}\b', x).group(0)) if re.search(r'\b(18|19|20)\d{2}\b', x) else None
-            )
-        return df
-    except Exception as e:
-        st.error(f"Error al cargar el catálogo: {e}")
-        return pd.DataFrame()
+df = load_data()
 
-df_raw = cargar_datos(URL_CSV_GITHUB)
+# ---------------------------------------------------------
+# BARRA LATERAL: FILTROS Y SOLICITUD DE DESCARGA
+# ---------------------------------------------------------
+st.sidebar.title("📚 Filtros de Búsqueda")
 
-if not df_raw.empty:
-    # Identificar nombres de columnas dinámicamente
-    cols = df_raw.columns.tolist()
-    col_titulo = cols[0]
-    col_autor = cols[1] if len(cols) > 1 else cols[0]
-    col_enlace = cols[2] if len(cols) > 2 else cols[0]
+# 1. Categoría Principal (Temática)
+categorias = ["Todas"] + sorted(df['Categoria_Principal'].dropna().unique().tolist())
+cat_selected = st.sidebar.selectbox("Temática / Categoría:", categorias)
 
-    # --- BARRA LATERAL (FILTROS) ---
-    st.sidebar.header("🔍 Filtros & Búsqueda")
-    
-    # Buscador de texto libre
-    busqueda = st.sidebar.text_input("Buscar por título o autor:", "")
-    
-    # Filtro por rango de años (si existen años detectados)
-    anios_validos = df_raw['Año'].dropna().astype(int)
-    if not anios_validos.empty and anios_validos.min() < anios_validos.max():
-        min_anio, max_anio = int(anios_validos.min()), int(anios_validos.max())
-        rango_anios = st.sidebar.slider(
-            "Rango de años:",
-            min_value=min_anio,
-            max_value=max_anio,
-            value=(min_anio, max_anio)
-        )
+# 2. Tipo de Documento
+tipos = ["Todos"] + sorted(df['Tipo_Documento'].dropna().unique().tolist())
+tipo_selected = st.sidebar.selectbox("Tipo de Documento:", tipos)
+
+# 3. Rango de Años
+min_year = int(df['Año_Clean'].min()) if not df['Año_Clean'].isna().all() else 1800
+max_year = int(df['Año_Clean'].max()) if not df['Año_Clean'].isna().all() else 2026
+
+year_range = st.sidebar.slider(
+    "Filtrar por Año de Publicación:",
+    min_value=min_year,
+    max_value=max_year,
+    value=(min_year, max_year)
+)
+
+st.sidebar.markdown("---")
+
+# ---------------------------------------------------------
+# SECCIÓN: SOLICITUD DE DESCARGA VÍA CÓDIGO SERIAL
+# ---------------------------------------------------------
+st.sidebar.subheader("🔑 Solicitar Descarga")
+st.sidebar.caption("Ingresa el código del libro que deseas solicitar (ej. LIB-001):")
+
+input_code = st.sidebar.text_input("Código del Libro:", placeholder="LIB-xxx").strip().upper()
+
+if st.sidebar.button("Obtener Enlace de Descarga"):
+    if input_code:
+        match = df[df['ID_Libro'] == input_code]
+        if not match.empty:
+            book = match.iloc[0]
+            st.sidebar.success(f"**{book['Titulo']}**")
+            
+            # Verificación de enlace de descarga disponible
+            link_descarga = book['Link_Descarga']
+            if pd.notna(link_descarga) and str(link_descarga).strip() != "":
+                st.sidebar.markdown(f"[📥 Descargar Archivo Completo]({link_descarga})")
+            else:
+                st.sidebar.info("📌 Tu solicitud ha sido registrada. El enlace directo estará disponible en breve.")
+        else:
+            st.sidebar.error("Código de libro no encontrado. Verifica en la lista principal.")
     else:
-        rango_anios = None
+        st.sidebar.warning("Por favor ingresa un código válido.")
 
-    # --- FILTRADO DE DATOS ---
-    df_filtrado = df_raw.copy()
-    
-    if busqueda:
-        condicion = df_filtrado.astype(str).apply(
-            lambda x: x.str.contains(busqueda, case=False, na=False)
-        ).any(axis=1)
-        df_filtrado = df_filtrado[condicion]
-        
-    if rango_anios and 'Año' in df_filtrado.columns:
-        df_filtrado = df_filtrado[
-            (df_filtrado['Año'].isna()) | 
-            ((df_filtrado['Año'] >= rango_anios[0]) & (df_filtrado['Año'] <= rango_anios[1]))
-        ]
+# ---------------------------------------------------------
+# CUERPO PRINCIPAL
+# ---------------------------------------------------------
+st.title("📖 Catálogo Digital de Archivo y Lectura")
+st.caption("Explora, previsualiza en línea y solicita acceso a títulos en formato digital.")
 
-    # --- CONTENIDO PRINCIPAL ---
-    st.title("📚 Biblioteca Digital")
-    st.caption(f"Mostrando {len(df_filtrado)} de {len(df_raw)} publicaciones disponibles.")
+# Búsqueda por Texto (Título / Autor / Etiquetas)
+search_query = st.text_input("🔎 Buscar por Título, Autor o Palabra Clave:", placeholder="Ej. Bresson, Urbanismo, Foucault...")
 
-    # Renderizado en rejilla (Grid de 2 columnas)
-    col1, col2 = st.columns(2)
-    
-    for idx, row in df_filtrado.reset_index(drop=True).iterrows():
-        # Alternar entre columna izquierda y derecha
-        col_actual = col1 if idx % 2 == 0 else col2
-        
-        titulo = row[col_titulo]
-        autor = row[col_autor]
-        enlace = row[col_enlace]
-        anio_str = f" ({int(row['Año'])})" if pd.notna(row.get('Año')) else ""
+# Aplicación de filtros al DataFrame
+filtered_df = df.copy()
 
-        with col_actual:
-            with st.container():
-                st.markdown(f"""
-                <div class="book-card">
-                    <div class="book-title">📖 {titulo}{anio_str}</div>
-                    <div class="book-author">✍️ {autor}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Desplegable individual para previsualizar/solicitar
-                with st.expander("👁️ Ver detalles y opciones"):
-                    st.write(f"**Título:** {titulo}")
-                    st.write(f"**Autor/a:** {autor}")
-                    
-                    if pd.notna(enlace) and str(enlace).startswith("http"):
-                        st.link_button("🔗 Previsualizar / Abrir en Drive", str(enlace))
-                    else:
-                        st.info("Enlace de previsualización no disponible.")
+# Filtro por temática
+if cat_selected != "Todas":
+    filtered_df = filtered_df[filtered_df['Categoria_Principal'] == cat_selected]
 
-                    st.divider()
-                    
-                    # Cuadro de solicitud con correo
-                    st.subheader("📩 Solicitar descarga por correo")
-                    correo_user = st.text_input(
-                        "Ingresa tu correo para recibir el archivo:",
-                        key=f"email_{idx}",
-                        placeholder="ejemplo@correo.com"
-                    )
-                    
-                    if st.button("Enviar solicitud", key=f"btn_{idx}"):
-                        if correo_user and "@" in correo_user:
-                            # Aquí se conecta con el flujo del Google Form / Apps Script si lo deseas
-                            st.success(f"¡Solicitud enviada! Se compartirá el acceso a **{correo_user}**.")
-                        else:
-                            st.warning("Por favor introduce un correo electrónico válido.")
-                st.write("") # Espaciador vertical
+# Filtro por tipo de documento
+if tipo_selected != "Todos":
+    filtered_df = filtered_df[filtered_df['Tipo_Documento'] == tipo_selected]
 
-    # Opciones avanzadas en la barra lateral
-    st.sidebar.divider()
-    if st.sidebar.button("🔄 Actualizar catálogo"):
-        st.cache_data.clear()
-        st.rerun()
+# Filtro por año (respetando los registros que no tienen año especificado '-')
+filtered_df = filtered_df[
+    (filtered_df['Año_Clean'].isna()) | 
+    ((filtered_df['Año_Clean'] >= year_range[0]) & (filtered_df['Año_Clean'] <= year_range[1]))
+]
 
+# Filtro por texto de búsqueda
+if search_query:
+    q = search_query.lower()
+    filtered_df = filtered_df[
+        filtered_df['Titulo'].str.lower().str.contains(q, na=False) |
+        filtered_df['Autor-a'].str.lower().str.contains(q, na=False) |
+        filtered_df['Enfoque_Especifico'].str.lower().str.contains(q, na=False) |
+        filtered_df['Etiquetas'].str.lower().str.contains(q, na=False)
+    ]
+
+# Métrica de Resultados
+col_m1, col_m2 = st.columns([2, 8])
+with col_m1:
+    st.metric(label="Libros Encontrados", value=len(filtered_df))
+
+st.markdown("---")
+
+# Visualización de Libros en Vista Lista / Tarjetas
+if filtered_df.empty:
+    st.warning("No se encontraron publicaciones que coincidan con los filtros seleccionados.")
 else:
-    st.warning("No se pudieron cargar los libros. Revisa la URL RAW de GitHub.")
+    for idx, row in filtered_df.iterrows():
+        with st.container():
+            st.markdown(f"""
+                <div class="stCard">
+                    <span class="book-code">{row['ID_Libro']}</span> — <strong>{row['Categoria_Principal']}</strong> ({row['Tipo_Documento']})
+                    <h3 style="margin-top: 5px; margin-bottom: 5px; color: #111;">{row['Titulo']}</h3>
+                    <p style="margin-bottom: 5px;"><strong>Autor(a):</strong> {row['Autor-a']} | <strong>Año:</strong> {row['Año']}</p>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            c1, c2, c3 = st.columns([3, 3, 4])
+            
+            # Enlace a Previsualización en Drive
+            preview_url = row['Link_Previsualizacion']
+            if pd.notna(preview_url) and str(preview_url).strip() != "":
+                c1.markdown(f"[👁️ Previsualizar en Drive]({preview_url})")
+            else:
+                c1.caption("👁️ Vista previa no vinculada")
+                
+            # Muestra etiquetas adicionales si existen
+            if pd.notna(row['Etiquetas']) and str(row['Etiquetas']).strip() != "":
+                c2.caption(f"🏷️ *{row['Etiquetas']}*")
+                
+            st.markdown("<br>", unsafe_allow_html=True)
