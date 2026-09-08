@@ -40,11 +40,55 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Carga de la base de datos
+# Carga de la base de datos con mapeo tolerante de columnas
 @st.cache_data
 def load_data():
     df = pd.read_csv('Catalogo_Estructurado.csv')
+    
+    # 1. Eliminar espacios accidentales en los nombres de las columnas
+    df.columns = df.columns.str.strip()
+    
+    # 2. Diccionario de equivalencias para normalizar nombres
+    mapa_columnas = {}
+    for col in df.columns:
+        c_low = col.lower().replace("_", "").replace("-", "").replace(" ", "")
+        
+        if "id" in c_low or "codigo" in c_low:
+            mapa_columnas[col] = "ID_Libro"
+        elif "categoria" in c_low or "tematica" in c_low:
+            mapa_columnas[col] = "Categoria_Principal"
+        elif "tipo" in c_low or "documento" in c_low:
+            mapa_columnas[col] = "Tipo_Documento"
+        elif "titulo" in c_low or "nombre" in c_low:
+            mapa_columnas[col] = "Titulo"
+        elif "autor" in c_low:
+            mapa_columnas[col] = "Autor-a"
+        elif "año" in c_low or "anio" in c_low or "date" in c_low:
+            mapa_columnas[col] = "Año"
+        elif "preview" in c_low or "previsua" in c_low or "vista" in c_low:
+            mapa_columnas[col] = "Link_Previsualizacion"
+        elif "descarga" in c_low or "link" in c_low or "enlace" in c_low:
+            mapa_columnas[col] = "Link_Descarga"
+        elif "enfoque" in c_low:
+            mapa_columnas[col] = "Enfoque_Especifico"
+        elif "etiqueta" in c_low or "tag" in c_low:
+            mapa_columnas[col] = "Etiquetas"
+            
+    df = df.rename(columns=mapa_columnas)
+    
+    # Asegurar existencia de columnas esenciales si el CSV no las tiene
+    columnas_base = [
+        'ID_Libro', 'Categoria_Principal', 'Tipo_Documento', 'Titulo', 
+        'Autor-a', 'Año', 'Link_Previsualizacion', 'Link_Descarga', 
+        'Enfoque_Especifico', 'Etiquetas'
+    ]
+    for c in columnas_base:
+        if c not in df.columns:
+            df[c] = "-"
+            
+    # Convertir Año a numérico de forma segura
     df['Año_Clean'] = pd.to_numeric(df['Año'], errors='coerce')
+    
     return df
 
 df = load_data()
@@ -55,11 +99,13 @@ df = load_data()
 st.sidebar.title("📚 Filtros de Búsqueda")
 
 # 1. Categoría Principal (Temática)
-categorias = ["Todas"] + sorted(df['Categoria_Principal'].dropna().unique().tolist())
+categorias_vals = [x for x in df['Categoria_Principal'].dropna().unique().tolist() if str(x) != "-"]
+categorias = ["Todas"] + sorted(categorias_vals)
 cat_selected = st.sidebar.selectbox("Temática / Categoría:", categorias)
 
 # 2. Tipo de Documento
-tipos = ["Todos"] + sorted(df['Tipo_Documento'].dropna().unique().tolist())
+tipos_vals = [x for x in df['Tipo_Documento'].dropna().unique().tolist() if str(x) != "-"]
+tipos = ["Todos"] + sorted(tipos_vals)
 tipo_selected = st.sidebar.selectbox("Tipo de Documento:", tipos)
 
 # 3. Rango de Años
@@ -85,14 +131,14 @@ input_code = st.sidebar.text_input("Código del Libro:", placeholder="LIB-xxx").
 
 if st.sidebar.button("Obtener Enlace de Descarga"):
     if input_code:
-        match = df[df['ID_Libro'] == input_code]
+        match = df[df['ID_Libro'].astype(str).str.upper() == input_code]
         if not match.empty:
             book = match.iloc[0]
             st.sidebar.success(f"**{book['Titulo']}**")
             
             # Verificación de enlace de descarga disponible
             link_descarga = book['Link_Descarga']
-            if pd.notna(link_descarga) and str(link_descarga).strip() != "":
+            if pd.notna(link_descarga) and str(link_descarga).strip() not in ["", "-"]:
                 st.sidebar.markdown(f"[📥 Descargar Archivo Completo]({link_descarga})")
             else:
                 st.sidebar.info("📌 Tu solicitud ha sido registrada. El enlace directo estará disponible en breve.")
@@ -121,7 +167,7 @@ if cat_selected != "Todas":
 if tipo_selected != "Todos":
     filtered_df = filtered_df[filtered_df['Tipo_Documento'] == tipo_selected]
 
-# Filtro por año (respetando los registros que no tienen año especificado '-')
+# Filtro por año
 filtered_df = filtered_df[
     (filtered_df['Año_Clean'].isna()) | 
     ((filtered_df['Año_Clean'] >= year_range[0]) & (filtered_df['Año_Clean'] <= year_range[1]))
@@ -131,10 +177,10 @@ filtered_df = filtered_df[
 if search_query:
     q = search_query.lower()
     filtered_df = filtered_df[
-        filtered_df['Titulo'].str.lower().str.contains(q, na=False) |
-        filtered_df['Autor-a'].str.lower().str.contains(q, na=False) |
-        filtered_df['Enfoque_Especifico'].str.lower().str.contains(q, na=False) |
-        filtered_df['Etiquetas'].str.lower().str.contains(q, na=False)
+        filtered_df['Titulo'].astype(str).str.lower().str.contains(q, na=False) |
+        filtered_df['Autor-a'].astype(str).str.lower().str.contains(q, na=False) |
+        filtered_df['Enfoque_Especifico'].astype(str).str.lower().str.contains(q, na=False) |
+        filtered_df['Etiquetas'].astype(str).str.lower().str.contains(q, na=False)
     ]
 
 # Métrica de Resultados
@@ -162,13 +208,13 @@ else:
             
             # Enlace a Previsualización en Drive
             preview_url = row['Link_Previsualizacion']
-            if pd.notna(preview_url) and str(preview_url).strip() != "":
+            if pd.notna(preview_url) and str(preview_url).strip() not in ["", "-"]:
                 c1.markdown(f"[👁️ Previsualizar en Drive]({preview_url})")
             else:
                 c1.caption("👁️ Vista previa no vinculada")
                 
             # Muestra etiquetas adicionales si existen
-            if pd.notna(row['Etiquetas']) and str(row['Etiquetas']).strip() != "":
+            if pd.notna(row['Etiquetas']) and str(row['Etiquetas']).strip() not in ["", "-"]:
                 c2.caption(f"🏷️ *{row['Etiquetas']}*")
                 
             st.markdown("<br>", unsafe_allow_html=True)
