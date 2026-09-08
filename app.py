@@ -29,7 +29,7 @@ def cargar_datos(url):
 # Cargar el dataframe
 df_books = cargar_datos(URL_CSV_GITHUB)
 
-if not df_books.empty():
+if not df_books.empty:
     # 3. Buscador / Filtro interactivo en Streamlit
     busqueda = st.text_input("🔍 Buscar por título o autor:", "")
 
