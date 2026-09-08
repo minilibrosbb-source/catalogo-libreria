@@ -197,20 +197,20 @@ else:
             preview_val = str(row['Link_Previsualizacion']).strip()
             
             # Comprobación de URL de previsualización
-            if pd.notna(row['Link_Previsualizacion']) and preview_val not in ["", "-", "nan", "None"]:
+           if pd.notna(row['Link_Previsualizacion']) and preview_val not in ["", "-", "nan", "None"]:
                 embed_url = preview_val
                 
-                # Transformación de enlace si proviene de Google Drive
                 if "drive.google.com" in embed_url:
                     embed_url = embed_url.replace("/view", "/preview").replace("?usp=sharing", "")
                     if not embed_url.endswith("/preview"):
                         embed_url = embed_url + "/preview"
 
-                # Desplegable con visor embebido en pantalla completa dentro de la app
-                with st.expander(f"👁️ Previsualizar documento en pantalla"):
-                    components.iframe(embed_url, height=600, scrolling=True)
+                with st.expander("👁️ Previsualizar documento"):
+                    # Botón de respaldo directo para navegadores móviles que bloquean iframes
+                    st.markdown(f"📱 *¿No carga en tu celular?* [Abrir vista previa directa]({preview_val})")
+                    components.iframe(embed_url, height=500, scrolling=True)
             else:
-                st.caption("👁️ Vista previa no vinculada")
+                st.caption("👁️ Vista previa no disponible"
 
             # Muestra de etiquetas
             etiquetas_val = str(row['Etiquetas']).strip()
